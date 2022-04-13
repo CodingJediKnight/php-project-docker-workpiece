@@ -1,3 +1,13 @@
+## Запуск
+```bash
+cp .env.example .env
+docker-compose up -d
+```
+Открыть `localhost:9100`
+
+## Не хватает сервисов?
+* [Laradoc](https://github.com/laradock/laradock)
+
 ## XDEBUG
 ### Установка
 * Прописать нужные env переменные

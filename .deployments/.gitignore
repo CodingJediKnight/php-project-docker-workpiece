@@ -1,0 +1,8 @@
+data/*
+logs/*
+dumps/*
+
+#keep
+!data/.keep
+!logs/.keep
+!dumps/.keep

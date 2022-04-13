@@ -1,0 +1,102 @@
+version: "3.5"
+
+networks:
+  app-network:
+    name: ${DOCKER_APP_NAME}-network
+    driver: bridge
+
+services:
+  php-fpm:
+    build:
+      context: ./.deployments/services/php-fpm
+      args:
+        - INSTALL_XDEBUG=${XDEBUG_ENABLE}
+    container_name: ${DOCKER_APP_NAME}-php-fpm
+    environment:
+      XDEBUG_MODE: ${XDEBUG_MODE}
+      PHP_IDE_CONFIG: ${PHP_IDE_CONFIG}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    tty: true
+    volumes:
+      - ./:/var/www/app
+    networks:
+      - app-network
+    depends_on:
+      - postgres
+      - redis
+
+  nginx:
+    build:
+      context: ./.deployments/services/nginx
+      args:
+        - PHP_UPSTREAM_CONTAINER=${DOCKER_APP_NAME}-php-fpm
+        - PHP_UPSTREAM_PORT=9000
+        - http_proxy
+        - https_proxy
+        - no_proxy
+    container_name: ${DOCKER_APP_NAME}-nginx
+    restart: unless-stopped
+    volumes:
+      - ./:/var/www/app
+      - ./.deployments/services/nginx/sites:/etc/nginx/sites-available
+      - ./.deployments/logs/nginx:/var/log/nginx
+      - ./.data/nginx/ssl:/etc/nginx/ssl
+    ports:
+      - "${NGINX_PORT}:80"
+    networks:
+      - app-network
+    depends_on:
+      - php-fpm
+
+  mysql:
+    build:
+      context: ./.deployments/services/mysql
+      args:
+        - MYSQL_VERSION=${MYSQL_VERSION}
+    container_name: ${DOCKER_APP_NAME}-mysql
+    environment:
+      - MYSQL_DATABASE=${MYSQL_DATABASE}
+      - MYSQL_USER=${MYSQL_USER}
+      - MYSQL_PASSWORD=${MYSQL_PASSWORD}
+      - MYSQL_ROOT_PASSWORD=${MYSQL_ROOT_PASSWORD}
+      - TZ=${WORKSPACE_TIMEZONE}
+    volumes:
+      - ./.data/mysql:/var/lib/mysql
+      - ./.deployments/services/mysql/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+      - ./.deployments/dumps/mysql/:/dumps
+    ports:
+      - "${MYSQL_PORT}:3306"
+    networks:
+      - app-network
+
+  postgres:
+    build:
+      context: ./.deployments/services/postgres
+      args:
+        - POSTGRES_VERSION=${POSTGRES_VERSION}
+    container_name: ${DOCKER_APP_NAME}-postgres
+    volumes:
+      - ./.data/postgres:/var/lib/postgresql/data
+      - ./.deployments/services/postgres/docker-entrypoint-initdb.d:/docker-entrypoint-initdb.d
+    ports:
+      - "${POSTGRES_PORT}:5432"
+    environment:
+      - POSTGRES_DB=${POSTGRES_DB}
+      - POSTGRES_USER=${POSTGRES_USER}
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+    networks:
+      - app-network
+
+  redis:
+    image: redis:latest
+    container_name: ${DOCKER_APP_NAME}-redis
+    environment:
+      - ALLOW_EMPTY_PASSWORD=yes
+      - REDIS_DISABLE_COMMANDS=FLUSHDB,FLUSHALL
+    volumes:
+      - ./.data/redis:/data
+    ports:
+      - "${REDIS_PORT}:6379"
+    networks:
+      - app-network

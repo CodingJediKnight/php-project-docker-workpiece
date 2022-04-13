@@ -1,0 +1,87 @@
+FROM php:8.1-fpm
+
+# Set Environment Variables
+ENV DEBIAN_FRONTEND noninteractive
+
+RUN set -eux; \
+    apt-get update; \
+    apt-get upgrade -y; \
+    apt-get install -y --no-install-recommends \
+            curl \
+            libmemcached-dev \
+            libz-dev \
+            libpq-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libfreetype6-dev \
+            libssl-dev \
+            libwebp-dev \
+            libxpm-dev \
+            libmcrypt-dev \
+            libonig-dev \
+            apt-utils \
+            gnupg2 \
+            git \
+            vim \
+            libzip-dev  \
+            zip  \
+            unzip \
+            default-mysql-client \
+    && rm -rf /var/lib/apt/lists/*
+
+RUN set -eux; \
+    docker-php-ext-configure zip; \
+    docker-php-ext-install zip; \
+    docker-php-ext-install pdo_mysql; \
+    docker-php-ext-install pdo_pgsql; \
+    docker-php-ext-install pgsql; \
+    pecl install -o -f redis; \
+    docker-php-ext-enable redis; \
+    docker-php-ext-install opcache; \
+    docker-php-ext-configure gd \
+            --prefix=/usr \
+            --with-jpeg \
+            --with-webp \
+            --with-xpm \
+            --with-freetype; \
+    docker-php-ext-install gd; \
+    php -r 'var_dump(gd_info());'
+
+ARG INSTALL_XDEBUG=false
+
+RUN if [ ${INSTALL_XDEBUG} = true ]; then \
+  pecl install xdebug-3.1.2; \
+  docker-php-ext-enable xdebug \
+;fi
+
+COPY opcache.ini /usr/local/etc/php/conf.d/opcache.ini
+COPY xdebug.ini /usr/local/etc/php/conf.d/xdebug.ini
+COPY laravel.ini /usr/local/etc/php/conf.d/laravel.ini
+COPY xlaravel.pool.conf /usr/local/etc/php-fpm.d/xlaravel.pool.conf
+COPY php.ini /usr/local/etc/php/php.ini
+
+USER root
+
+# Clean up
+RUN apt-get clean && \
+    rm -rf /var/lib/apt/lists/* /tmp/* /var/tmp/* && \
+    rm /var/log/lastlog /var/log/faillog
+
+# Configure non-root user.
+ARG PUID=1000
+ENV PUID ${PUID}
+ARG PGID=1000
+ENV PGID ${PGID}
+
+RUN groupmod -o -g ${PGID} www-data && \
+    usermod -o -u ${PUID} -g www-data www-data
+
+# Configure locale.
+ARG LOCALE=POSIX
+ENV LC_ALL ${LOCALE}
+
+WORKDIR /var/www
+
+CMD ["php-fpm"]
+
+EXPOSE 9000
